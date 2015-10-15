@@ -1,19 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define PREFIX_SIZE 8
 #define MAX_HOP_NUM_DIGITS 2
+#define BUFFER_SIZE 128
 
 // Run to compile
 // gcc -Wall -o main main.c -g
-
-short lastHopFound = -1;
 
 typedef enum{
   FALSE,
   TRUE
 } boolean;
+
+
+
+short lastHopFound = -1;
+boolean readAtStart = FALSE;
+char path[BUFFER_SIZE];
+
 
 
 typedef struct n{
@@ -95,7 +102,8 @@ void printMenu(){
 	printf("\t- Print Address Table:\t\tp\n");
 	printf("\t- Convert to 2-tree:\t\tc\n");
 	printf("\t- Adress Look-Up:\t\tl [prefix]\n");
-	printf("\t- Exit:\t\t\t\texit\n\n");
+	printf("\t- Help:\t\t\t\th\n");
+	printf("\t- Quit:\t\t\t\tq\n\n");
 	printf("Please select an option\n");
 }
 
@@ -240,7 +248,7 @@ node * ReadTable(char * inputPath){
 	fp = fopen(inputPath, "r");
 	
 	tree = NewNode("*");
-	
+
 	while(fgets(line, 12, fp) != NULL){
 		sscanf(line, "%s %hd", prefix, &nextHop);
 		AddPrefix(tree, prefix, nextHop);
@@ -264,7 +272,7 @@ int PrintTable(node * tree){
 	
 	while(nodeFifo != NULL){
 		treeAux = nodeFifo->value;
-		if(treeAux->nextHop != -1) printf("%s\t\t%d\n", treeAux->prefix, treeAux->nextHop);
+		if(treeAux->nextHop != -1) printf("%s\t\t%hd\n", treeAux->prefix, treeAux->nextHop);
 		if(treeAux->leftChild != NULL){
 			fifoEnd->next = NewFifo();
 			fifoEnd = fifoEnd->next;
@@ -281,24 +289,76 @@ int PrintTable(node * tree){
 	return 0;
 };
 
-int main(int argc, char* argv[]){
-	node * tree;
+void menuHandler(){
+	node * tree = NULL;
+	char buffer[BUFFER_SIZE];
+	char option, arg1[BUFFER_SIZE];
+	short arg2;
+	short nArgs;
 	
+	if(readAtStart) tree = ReadTable(path);
+	
+	while(TRUE){
+		
+		fgets (buffer, BUFFER_SIZE, stdin);
+		nArgs = sscanf(buffer,"%c %s %hd", &option, arg1, &arg2);
+		//printf("%d %d %d %d\n", strlen(buffer), 1, strlen(arg1), (arg2/10)+1);
+		
+		switch(option){
+			case 'f':
+				if(nArgs==2){
+					tree = ReadTable(arg1);
+					break;
+				}			
+			case 'a':
+				if(nArgs==3){
+					AddPrefix(tree, arg1, arg2);
+					break;
+				}
+			case 'd':
+				if(nArgs==2){
+					DeletePrefix(tree, arg1);
+					break;
+				}
+			case 'p':
+				if(nArgs==1){
+					PrintTable(tree);
+					break;
+				}
+			case 'c':
+				if(nArgs==1){
+					TwoTree(tree);
+					break;
+				}
+			case 'l':
+				if(nArgs==2){
+					AddressLookUp(tree, arg1);
+					break;
+				}
+			case 'h':
+				if(nArgs==1){
+					printMenu();
+					break;
+				}
+			case 'q':
+				if (nArgs==1) return;
+			default:
+				printf("Invalid command\n");
+		}
+	}
+};
+
+int main(int argc, char* argv[]){
+
 	if(argc>2){
 		printf("\nToo many arguments!\n\n");
 		exit(0);
 	}
-	
-	tree = ReadTable(argv[1]);
-	PrintTable(tree);
+	else if(argc == 2){
+		readAtStart = TRUE;
+		strcpy(path, argv[1]);
+	}
 
-	printf("AddressLookUp = %d\n", AddressLookUp(tree, "0101001"));
-	
-	TwoTree(tree);
-	PrintTable(tree);
-	
-	printf("AddressLookUp = %d\n", AddressLookUp(tree, "0101001"));
-	
 	printMenu();
 	/*  AddPrefix error handling test
 	short x;
@@ -314,9 +374,7 @@ int main(int argc, char* argv[]){
 			printf("nextHop not valid\n");
 			break;
 	}*/
-	
-	
-	
-	
+	menuHandler();
+	printf("Goodbye!\n");
 	exit(0);
 };
