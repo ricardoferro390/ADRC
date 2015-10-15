@@ -69,48 +69,67 @@ boolean hasNextHop(node * aux){
 	if(aux->nextHop != -1) return TRUE;
 	else return FALSE;
 };
+boolean validPrefix(char * prefix){
+	int i;
+	
+	if(strcmp(prefix, "*") == 0) return TRUE;
+	
+	for(i=0; i<strlen(prefix); i++){
+		if(prefix[i]=='0' || prefix[i]=='1') continue;
+		else return FALSE;
+	}
+	
+	return TRUE;
+};
+boolean validNextHop(int nextHop){
+	if(nextHop > 0) return TRUE;
+	else return FALSE;
+}
 
+void printMenu(){
+	printf("\n\tADRC - Mini Project I - Forwarding traffic in the internet\n");
+	printf("\tBy: Diogo Salgueiro 72777, Ricardo Ferro 72870\n");
+	printf("\n\t- Load tree from file:\t\tf [file]\n");
+	printf("\t- Add Prefix:\t\t\ta [prefix] [next hop]\n");
+	printf("\t- Delete Prefix:\t\td [prefix]\n");
+	printf("\t- Print Address Table:\t\tp\n");
+	printf("\t- Convert to 2-tree:\t\tc\n");
+	printf("\t- Adress Look-Up:\t\tl [prefix]\n");
+	printf("\t- Exit:\t\t\t\texit\n\n");
+	printf("Please select an option\n");
+}
 
-
-void AddPrefix(node * tree, char * prefix, int nextHop){
+short AddPrefix(node * tree, char * prefix, int nextHop){
 	int i;
 	char buffer[PREFIX_SIZE];
 	node * aux;
-	printf("\nread prefix %s\n", prefix);
+	
+	if(!validPrefix(prefix)) return -1;
+	if(!validNextHop(nextHop)) return -2;
+	
 	aux = tree;
 		
 	if(strcmp(prefix, "*") == 0){
 		tree->nextHop = nextHop;
-		printf("* prefix detected\n");
-		return;
+		return 0;
 	}
 			
 	for(i=0; i<strlen(prefix); i++){
 		if(prefix[i] == '0'){
-			printf("went left\n");
-			if(!hasLeftChild(aux)){
+			if(!hasLeftChild(aux))
 				aux->leftChild = NewNode(strncpy(buffer, prefix, i+1));
-				printf("created new node\n");
-			}
-			else printf("node already exists\n");
 			aux = aux->leftChild;
 		}
 		else if(prefix[i] == '1'){
-			printf("went rigt\n");
-			if(!hasRightChild(aux)){
+			if(!hasRightChild(aux))
 				aux->rightChild = NewNode(strncpy(buffer, prefix, i+1));
-				printf("created new node\n");
-			}
-			else printf("node already exists\n");
 			aux = aux->rightChild;
 		}
 		
-		if(i == strlen(prefix)-1){
+		if(i == strlen(prefix)-1)
 			aux->nextHop = nextHop;
-			printf("nextHop defined as %d\n", aux->nextHop);
-		}
 	}
-	return;
+	return 0;
 };
 
 boolean DeletePrefix(node * aux, char * prefix){
@@ -218,9 +237,8 @@ node * ReadTable(char * inputPath){
 	short nextHop;
 	node * tree;
 	
-	
 	fp = fopen(inputPath, "r");
-
+	
 	tree = NewNode("*");
 	
 	while(fgets(line, 12, fp) != NULL){
@@ -263,12 +281,11 @@ int PrintTable(node * tree){
 	return 0;
 };
 
-
 int main(int argc, char* argv[]){
 	node * tree;
 	
-	if(argc!=2){
-		printf("\nPlease specify the input file as a single argument\n\n");
+	if(argc>2){
+		printf("\nToo many arguments!\n\n");
 		exit(0);
 	}
 	
@@ -281,6 +298,25 @@ int main(int argc, char* argv[]){
 	PrintTable(tree);
 	
 	printf("AddressLookUp = %d\n", AddressLookUp(tree, "0101001"));
-
+	
+	printMenu();
+	/*  AddPrefix error handling test
+	short x;
+	x = AddPrefix(tree, "0110", -3);
+	switch(x){
+		case 0:
+			printf("prefix added\n");
+			break;
+		case -1:
+			printf("prefix not valid\n");
+			break;
+		case -2:
+			printf("nextHop not valid\n");
+			break;
+	}*/
+	
+	
+	
+	
 	exit(0);
 };
