@@ -8,6 +8,7 @@ short AddPrefix(node * tree, char * prefix, int nextHop){
 	int i;
 	node * aux;
 	
+	// Checking if prefix and nextHop are valid
 	if(!validPrefix(prefix)){
 		printf("Invalid Prefix %s\n", prefix);
 		return -2;
@@ -18,22 +19,28 @@ short AddPrefix(node * tree, char * prefix, int nextHop){
 	}
 	
 	aux = tree;
-		
+	
+	// If prefix is the default (*)
 	if(strcmp(prefix, "*") == 0){
 		tree->nextHop = nextHop;
 		printf("Added prefix %s with next-hop = %d\n", prefix, nextHop);
 		return 0;
 	}
-			
+	
+	// Travels throught the tree
 	for(i=0; i<strlen(prefix); i++){
+		// if next step is 0
 		if(prefix[i] == '0'){
+			// if the child doesn't exist
 			if(!hasLeftChild(aux)){
 				aux->leftChild = NewNode();
 				strncpy(aux->leftChild->prefix, prefix, i+1);
 			}
 			aux = aux->leftChild;
 		}
+		// if next step is 1
 		else if(prefix[i] == '1'){
+			// if the child doesn't exist
 			if(!hasRightChild(aux)){
 				aux->rightChild = NewNode();
 				strncpy(aux->rightChild->prefix, prefix, i+1);
@@ -41,6 +48,7 @@ short AddPrefix(node * tree, char * prefix, int nextHop){
 			aux = aux->rightChild;
 		}
 		
+		// Arrived ate specified prefix
 		if(i == strlen(prefix)-1)
 			aux->nextHop = nextHop;
 	}
@@ -53,25 +61,30 @@ boolean DeletePrefix(node * aux, char * prefix){
 	boolean deletedChild, isLeft;
 	short currentLevel;
 	
+	// tree doesn't exist
 	if(aux == NULL){
 		printf("Please load or create a tree first\n");
 		return FALSE;
 	}
 	
+	// currentLevel used to travel throught the tree
 	if(isRoot(aux)) currentLevel = 0;
 	else currentLevel = strlen(aux->prefix);
 	
 	if(strcmp(prefix, aux->prefix) == 0){
+		// prefix found but doesn't have next hop
 		if(!hasNextHop(aux)){
 			printf("Prefix %s not found in the tree\n", prefix);
 			return FALSE;
 		}
 		else{
+			// prefix found and has no children (delete node)
 			if(isLeaf(aux)){
 				free(aux);
 				printf("Deleted prefix %s\n", prefix);
 				return TRUE;
 			}
+			// prefix found and has children (just update next hop)
 			else{
 				aux->nextHop = -1;
 				printf("Deleted prefix %s\n", prefix);
@@ -80,6 +93,7 @@ boolean DeletePrefix(node * aux, char * prefix){
 		}		
 	}
 	else{
+		// travel through the tree until prefix match is found
 		if(prefix[currentLevel] == '0' && hasLeftChild(aux)){
 			deletedChild = DeletePrefix(aux->leftChild, prefix);
 			isLeft = TRUE;
@@ -94,10 +108,13 @@ boolean DeletePrefix(node * aux, char * prefix){
 		}
 	}
 	
+	// current node had child removed
 	if(deletedChild){
+		// updating deleted child pointer to NULL
 		if(isLeft) aux->leftChild = NULL;
 		else aux->rightChild = NULL;
 		
+		// if current node had child removed, is not a leaf and doesn't have nextHop (deletes himself)
 		if(!hasNextHop(aux) && isLeaf(aux)){
 			free(aux);
 			return TRUE;
@@ -111,26 +128,33 @@ boolean DeletePrefix(node * aux, char * prefix){
 void TwoTree(node * aux){
 	char buffer[PREFIX_SIZE];
 	
+	// tree doesn't exist
 	if(aux == NULL){
 		printf("Please load or create a tree first\n");
 		return;
 	}
+	// tree doesn't have * prefix, so conversion is not valid
 	if(isRoot(aux) && !hasNextHop(aux)){
 		printf("This tree doesn't have a default (*) next-hop\n");
 		return;
 	}
 	
+	// if current node is leaf no action is due. Return to previous node
 	if(isLeaf(aux))
 		return;
-	
+		
+	// found node with more specific next hop 
 	if(hasNextHop(aux)){
+		//register las hop found and clear hop from node (if not root)
 		lastHopFound = aux->nextHop;
-		aux->nextHop = -1;
+		if(!isRoot(aux)) aux->nextHop = -1;
 	}
 	
+	// Recursive call on left child if it exists
 	if(hasLeftChild(aux))
 		TwoTree(aux->leftChild);
 	else{
+		// creates left child with last found hop
 		strcpy(buffer, aux->prefix);
 		aux->leftChild = NewNode();
 		aux->leftChild->nextHop = lastHopFound;
@@ -140,9 +164,18 @@ void TwoTree(node * aux){
 			strcat(buffer, "0");
 		strcpy(aux->leftChild->prefix, buffer);
 	}
+	
+	// Reset lastHopFound to the default (*) and remove next hop from root
+	if(isRoot(aux)){
+		lastHopFound = aux->nextHop;
+		aux->nextHop = -1;
+	}
+	
+	// Recursive call on right child if it exists
 	if(hasRightChild(aux))
 		TwoTree(aux->rightChild);
 	else{
+		// creates right child with last found hop
 		strcpy(buffer, aux->prefix);
 		aux->rightChild = NewNode();
 		aux->rightChild->nextHop = lastHopFound;
@@ -161,20 +194,21 @@ short AddressLookUp(node * tree, char * prefix){
 	int i, result;
 	node * aux;
 	
+	// tree doesn't exist
 	if(tree == NULL){
 		printf("Please load or create a tree first\n");
 		return -2;
 	}
+	// checks if prefix is valid
 	if(!validPrefix(prefix)){
 		printf("Invalid Prefix %s\n", prefix);
 		return -3;
 	}
-	
-	
-	
+
 	aux = tree;
 	result = aux->nextHop;
 	
+	// travels through the tree and gets the most specific nexthop
 	for(i=0; i<strlen(prefix); i++){
 		if(prefix[i] == '0' && hasLeftChild(aux))
 			aux = aux->leftChild;
@@ -183,6 +217,7 @@ short AddressLookUp(node * tree, char * prefix){
 		if(hasNextHop(aux)) result = aux->nextHop;
 	}
 	
+	// if no nexthop is valid
 	if(result == -1) printf("The prefix %s has no possible next-hop in this tree\n", prefix);
 	return result;
 			
@@ -195,15 +230,18 @@ node * ReadTable(char * inputPath){
 	short nextHop;
 	node * tree;
 	
+	// opening input file
 	fp = fopen(inputPath, "r");
 	if(fp == NULL){
 		printf("Error opening file: %s\n", strerror(errno));
 		return NULL;
 	}
 	
+	// initializing tree
 	tree = NewNode();
 	strcpy(tree->prefix, "*");
-
+	
+	// for each line, adds prefix to the tree
 	while(fgets(line, 12, fp) != NULL){
 		if(sscanf(line, "%s %hd", prefix, &nextHop) == 2)
 			AddPrefix(tree, prefix, nextHop);
@@ -220,20 +258,25 @@ int PrintTable(node * tree){
 	fifo * nodeFifo, * fifoEnd;
 	node * treeAux;
 	
+	// tree doesn't exist
 	if(tree == NULL){
 		printf("Please load or create a tree first\n");
 		return -1;
 	}
 	
+	// creation of FIFO with nodes to print
 	nodeFifo = NewFifo();
 	fifoEnd = nodeFifo;
 	nodeFifo->value = tree;
 	
 	printf("\nPrefix\t\tNext Hop\n");
 	
+	// travels through the tree
 	while(nodeFifo != NULL){
 		treeAux = nodeFifo->value;
+		// print current node
 		if(hasNextHop(treeAux)) printf("%s\t\t%hd\n", treeAux->prefix, treeAux->nextHop);
+		// adds the childs of the current node to the end of the FIFO
 		if(hasLeftChild(treeAux)){
 			fifoEnd->next = NewFifo();
 			fifoEnd = fifoEnd->next;
@@ -244,6 +287,7 @@ int PrintTable(node * tree){
 			fifoEnd = fifoEnd->next;
 			fifoEnd->value = treeAux->rightChild;
 		}
+		// goes to the next node on the FIFO
 		nodeFifo = nodeFifo->next;
 	}
 	printf("\n");
@@ -256,11 +300,13 @@ void MenuHandler(){
 	short arg2, nArgs, lookupResult;
 	boolean treeDeleted = FALSE;
 	
+	// printing menu
 	printMenu();
 	if(readAtStart) tree = ReadTable(path);
 	printf("Please select an option\n");
 	
 	while(TRUE){
+		// gets user commands and arguments
 		printf("-> ");
 		fgets (buffer, BUFFER_SIZE, stdin);
 		nArgs = sscanf(buffer, "%c %s %hd %s", &option, arg1, &arg2, garbageDetector);
@@ -270,6 +316,7 @@ void MenuHandler(){
 			strcpy(tree->prefix, "*");
 		}
 		
+		// selects function based on user option
 		if(option == 'f' && nArgs == 2) tree = ReadTable(arg1);
 		else if(option == 'a' && nArgs == 3) AddPrefix(tree, arg1, arg2);
 		else if(option == 'd' && nArgs == 2) treeDeleted = DeletePrefix(tree, arg1);
@@ -288,6 +335,7 @@ void MenuHandler(){
 		}
 		else printf("Invalid command\n");
 		
+		// handle case where tree becomes empty after delete prefix
 		if(treeDeleted){
 			tree = NULL;
 			treeDeleted = FALSE;
@@ -296,7 +344,7 @@ void MenuHandler(){
 };
 
 int main(int argc, char ** argv){
-
+	
 	checkArguments(argc, argv);
 	MenuHandler();
 	exit(0);
