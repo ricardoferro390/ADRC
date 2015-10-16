@@ -100,6 +100,24 @@ void checkArguments(int argc, char ** argv){
 	}
 }
 
+void clearWorkspace(node * aux){
+	
+	if(aux == NULL){
+		printf("No memory to free\n");
+		return;
+	}
+	
+	if(hasLeftChild(aux))
+		clearWorkspace(aux->leftChild);
+	if(hasRightChild(aux))
+		clearWorkspace(aux->rightChild);
+	
+	if(isRoot(aux)) printf("Memory cleared!\n");
+	free(aux);
+	
+	return;
+}
+
 void printMenu(){
 	printf("\n\tADRC - Mini Project I - Forwarding traffic in the internet\n");
 	printf("\tBy: Diogo Salgueiro 72777, Ricardo Ferro 72870\n");
@@ -115,7 +133,6 @@ void printMenu(){
 
 short AddPrefix(node * tree, char * prefix, int nextHop){
 	int i;
-	char buffer[PREFIX_SIZE];
 	node * aux;
 	
 	if(!validPrefix(prefix)){
@@ -139,14 +156,14 @@ short AddPrefix(node * tree, char * prefix, int nextHop){
 		if(prefix[i] == '0'){
 			if(!hasLeftChild(aux)){
 				aux->leftChild = NewNode();
-				strcpy(aux->leftChild->prefix, strncpy(buffer, prefix, i+1));
+				strncpy(aux->leftChild->prefix, prefix, i+1);
 			}
 			aux = aux->leftChild;
 		}
 		else if(prefix[i] == '1'){
 			if(!hasRightChild(aux)){
 				aux->rightChild = NewNode();
-				strcpy(aux->rightChild->prefix, strncpy(buffer, prefix, i+1));
+				strncpy(aux->rightChild->prefix, prefix, i+1);
 			}
 			aux = aux->rightChild;
 		}
@@ -221,13 +238,12 @@ boolean DeletePrefix(node * aux, char * prefix){
 void TwoTree(node * aux){
 	char buffer[PREFIX_SIZE];
 	
-	if(isRoot(aux) && !hasNextHop(aux)){
-		printf("This tree doesn't have a default (*) next-hop\n");
-		return;
-	}
-	
 	if(aux == NULL){
 		printf("Please load or create a tree first\n");
+		return;
+	}
+	if(isRoot(aux) && !hasNextHop(aux)){
+		printf("This tree doesn't have a default (*) next-hop\n");
 		return;
 	}
 	
@@ -272,6 +288,17 @@ short AddressLookUp(node * tree, char * prefix){
 	int i, result;
 	node * aux;
 	
+	if(tree == NULL){
+		printf("Please load or create a tree first\n");
+		return -2;
+	}
+	if(!validPrefix(prefix)){
+		printf("Invalid Prefix %s\n", prefix);
+		return -3;
+	}
+	
+	
+	
 	aux = tree;
 	result = aux->nextHop;
 	
@@ -283,6 +310,7 @@ short AddressLookUp(node * tree, char * prefix){
 		if(hasNextHop(aux)) result = aux->nextHop;
 	}
 	
+	if(result == -1) printf("The prefix %s has no possible next-hop in this tree\n", prefix);
 	return result;
 			
 			
@@ -304,8 +332,10 @@ node * ReadTable(char * inputPath){
 	strcpy(tree->prefix, "*");
 
 	while(fgets(line, 12, fp) != NULL){
-		sscanf(line, "%s %hd", prefix, &nextHop);
-		AddPrefix(tree, prefix, nextHop);
+		if(sscanf(line, "%s %hd", prefix, &nextHop) == 2)
+			AddPrefix(tree, prefix, nextHop);
+		else
+			printf("Line with invalid or few arguments\n");
    	}
    	fclose(fp);
    	printf("Tree loaded from %s\n", inputPath);
@@ -374,11 +404,11 @@ void MenuHandler(){
 		else if(option == 'c' && nArgs == 1) TwoTree(tree);
 		else if(option == 'l' && nArgs == 2){
 			lookupResult = AddressLookUp(tree, arg1);
-			if(lookupResult == -1) printf("The prefix %s has no possible next-hop in this tree\n", arg1);
-			else printf("Next-hop(%s) = %hd\n", arg1, lookupResult);
+			if(lookupResult > 0) printf("Next-hop(%s) = %hd\n", arg1, lookupResult);
 		}
 		else if(option == 'h' && nArgs == 1) printMenu();
 		else if(option == 'q' && nArgs == 1){
+			clearWorkspace(tree);
 			printf("Project by: Diogo Salgueiro 72777 and Ricardo Ferro 72870\n");
 			printf("Goodbye!\n");
 			return;
