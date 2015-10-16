@@ -12,4 +12,5 @@ ADRCMP1.o: ADRCMP1.c Utilities.o
 Utilities.o: Utilities.c
 	$(CC) -c -o Utilities.o Utilities.c
 
-
+clean:
+	rm *.o
