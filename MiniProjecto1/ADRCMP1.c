@@ -34,7 +34,8 @@ short AddPrefix(node * tree, char * prefix, int nextHop){
 			// if the child doesn't exist
 			if(!hasLeftChild(aux)){
 				aux->leftChild = NewNode();
-				strncpy(aux->leftChild->prefix, prefix, i+1);
+				strcpy(aux->leftChild->prefix, prefix);
+				aux->leftChild->prefix[i+1] = '\0';
 			}
 			aux = aux->leftChild;
 		}
@@ -43,7 +44,8 @@ short AddPrefix(node * tree, char * prefix, int nextHop){
 			// if the child doesn't exist
 			if(!hasRightChild(aux)){
 				aux->rightChild = NewNode();
-				strncpy(aux->rightChild->prefix, prefix, i+1);
+				strcpy(aux->rightChild->prefix, prefix);
+				aux->rightChild->prefix[i+1] = '\0';
 			}
 			aux = aux->rightChild;
 		}
@@ -143,12 +145,12 @@ void TwoTree(node * aux){
 	if(isLeaf(aux))
 		return;
 		
-	// found node with more specific next hop 
-	if(hasNextHop(aux)){
-		//register las hop found and clear hop from node (if not root)
+	// found node with more specific next hop. registers last hop found
+	if(hasNextHop(aux))
 		lastHopFound = aux->nextHop;
-		if(!isRoot(aux)) aux->nextHop = -1;
-	}
+	else
+		aux->nextHop = lastHopFound;
+
 	
 	// Recursive call on left child if it exists
 	if(hasLeftChild(aux))
@@ -165,8 +167,8 @@ void TwoTree(node * aux){
 		strcpy(aux->leftChild->prefix, buffer);
 	}
 	
-	// Reset lastHopFound to the default (*) and remove next hop from root
-	if(isRoot(aux)){
+	// Reset lastHopFound and clear hop from node
+	if(hasNextHop(aux)){
 		lastHopFound = aux->nextHop;
 		aux->nextHop = -1;
 	}
@@ -305,6 +307,8 @@ void MenuHandler(){
 	if(readAtStart) tree = ReadTable(path);
 	printf("Please select an option\n");
 	
+	tree = ReadTable("input1.ft");
+	
 	while(TRUE){
 		// gets user commands and arguments
 		printf("-> ");
@@ -315,6 +319,8 @@ void MenuHandler(){
 			tree = NewNode();
 			strcpy(tree->prefix, "*");
 		}
+		
+		
 		
 		// selects function based on user option
 		if(option == 'f' && nArgs == 2) tree = ReadTable(arg1);
