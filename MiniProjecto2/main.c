@@ -171,8 +171,10 @@ node * ReadNetwork(char * inputPath){
 	
 	
 	while(fgets(line, MAX_LINE_SIZE, fp) != NULL){
-		if(sscanf(line, "%d %d %d", &tail, &head, &role) == 3)
-			AddEdge(network, tail, head, role);
+		if(sscanf(line, "%d %d %d", &tail, &head, &role) == 3){
+			if(tail<5000 || head<5000) 
+				AddEdge(network, tail, head, role);
+		}
 		else
 			printf("Line with invalid or few arguments\n");
    	}
@@ -225,12 +227,11 @@ void printRoutingTable(node * network, routingTable * results){
 		}
 	}
 	return;
-}
+}	
 		
 		
-
-void findRoutesToNode(node * network, int destinationNode){
-	fifo * currentNode = NULL, * fifoEnd = NULL;
+routingTable * findRoutesToNode(node * network, int destinationNode){
+	fifo * currentNode = NULL, * fifoEnd = NULL, * aux = NULL;
 	adj * cursor = NULL;
 	routingTable * results;
 	sentRecords * records;
@@ -286,13 +287,13 @@ void findRoutesToNode(node * network, int destinationNode){
 		if(currentNode->currentRouteType == CUSTOMER_ROUTE){
 			cursor = network[currentNode->nodeId].providers;
 			while(cursor != NULL && !records[currentNode->nodeId].sentToProviders){
-				if(cursor->nodeId != currentNode->previousNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, CUSTOMER_ROUTE, currentNode->currentHops + 1));
+				if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, CUSTOMER_ROUTE, currentNode->currentHops + 1));
 				cursor = cursor->next;
 			}
 			records[currentNode->nodeId].sentToProviders = TRUE;
 			cursor = network[currentNode->nodeId].peers;
 			while(cursor != NULL && !records[currentNode->nodeId].sentToPeers){
-				if(cursor->nodeId != currentNode->previousNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PEER_ROUTE, currentNode->currentHops + 1));
+				if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PEER_ROUTE, currentNode->currentHops + 1));
 				cursor = cursor->next;
 			}
 			records[currentNode->nodeId].sentToPeers = TRUE;
@@ -300,17 +301,116 @@ void findRoutesToNode(node * network, int destinationNode){
 		
 		cursor = network[currentNode->nodeId].customers;
 		while(cursor != NULL && !records[currentNode->nodeId].sentToCustomers){
-			if(cursor->nodeId != currentNode->previousNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PROVIDER_ROUTE, currentNode->currentHops + 1));
+			if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PROVIDER_ROUTE, currentNode->currentHops + 1));
 			cursor = cursor->next;
 		}
 		records[currentNode->nodeId].sentToCustomers = TRUE;
 				
+		aux = currentNode;
 		currentNode = currentNode->next;
+		free(aux);
 	}
 	
-	printRoutingTable(network, results);
-	return;
+	//printRoutingTable(network, results);
+	return results;
 }
+
+
+routingTable * findRoutesToNodeOld(node * network, int destinationNode){
+	fifo * currentNode = NULL, * fifoEnd = NULL, * aux = NULL;
+	adj * cursor = NULL;
+	routingTable * results;
+	
+	results = NewRoutingTable(numberOfNodes);
+	
+	// first node only (destination node)
+	results[destinationNode].hops = 0;
+	results[destinationNode].routeType = 0;
+	cursor = network[destinationNode].providers;
+	while(cursor != NULL){
+		if(currentNode == NULL){
+			currentNode = InsertFifo(currentNode, NewFifoElement(destinationNode, cursor->nodeId, CUSTOMER_ROUTE, 1));
+			fifoEnd = currentNode;
+		}
+		else fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, CUSTOMER_ROUTE, 1));
+		cursor = cursor->next;
+	}
+	
+	cursor = network[destinationNode].peers;
+	while(cursor != NULL){
+		if(currentNode == NULL){
+			currentNode = InsertFifo(currentNode, NewFifoElement(destinationNode, cursor->nodeId, PEER_ROUTE, 1));
+			fifoEnd = currentNode;
+		}
+		else fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, PEER_ROUTE, 1));
+		cursor = cursor->next;
+	}
+	
+	cursor = network[destinationNode].customers;
+	while(cursor != NULL){
+		if(currentNode == NULL){
+			currentNode = InsertFifo(currentNode, NewFifoElement(destinationNode, cursor->nodeId, PROVIDER_ROUTE, 1));
+			fifoEnd = currentNode;
+		}
+		else fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, PROVIDER_ROUTE, 1));
+		cursor = cursor->next;
+	}
+	////////////////////////////////////////
+
+	while(currentNode != NULL){
+		//printf("Current Node = %d\n", currentNode->nodeId);
+		
+		if(currentNode->currentRouteType > results[currentNode->nodeId].routeType || (currentNode->currentRouteType == results[currentNode->nodeId].routeType && currentNode->currentHops < results[currentNode->nodeId].hops)){
+			results[currentNode->nodeId].routeType = currentNode->currentRouteType;
+			results[currentNode->nodeId].hops = currentNode->currentHops;
+		}
+		
+		if(currentNode->currentRouteType == CUSTOMER_ROUTE){
+			cursor = network[currentNode->nodeId].providers;
+			while(cursor != NULL){
+				if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, CUSTOMER_ROUTE, currentNode->currentHops + 1));
+				cursor = cursor->next;
+			}
+			cursor = network[currentNode->nodeId].peers;
+			while(cursor != NULL){
+				if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PEER_ROUTE, currentNode->currentHops + 1));
+				cursor = cursor->next;
+			}
+		}
+		
+		cursor = network[currentNode->nodeId].customers;
+		while(cursor != NULL){
+			if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PROVIDER_ROUTE, currentNode->currentHops + 1));
+			cursor = cursor->next;
+		}
+		
+		aux = currentNode;
+		currentNode = currentNode->next;
+		free(aux);
+	}
+	
+	//printRoutingTable(network, results);
+	return results;
+}
+
+
+boolean compareResults(node * network, int destinationNode){
+	int i;
+	routingTable * newResults, * oldResults;
+	
+	newResults = findRoutesToNode(network, destinationNode);
+	printf("Optimized Version is done!\n");
+	oldResults = findRoutesToNodeOld(network, destinationNode);
+	
+	for(i = 1; i <= numberOfNodes; i++){
+		if(newResults[i].routeType != oldResults[i].routeType || newResults[i].hops != oldResults[i].hops){
+			printf("Node:  %d\tRoute Type:  %d\t\tHops: %d\n", i, newResults[i].routeType, newResults[i].hops);
+			printf("Node:  %d\tRoute Type:  %d\t\tHops: %d\n", i, oldResults[i].routeType, oldResults[i].hops);
+			return FALSE;
+		}
+	}
+	return TRUE;
+}	
 
 
 int main(){
@@ -320,7 +420,10 @@ int main(){
 	//network = ReadNetwork("Enunciado.txt");
 	//network = ReadNetwork("Enunciado2.txt");
 	//printAdjList(network);
-	findRoutesToNode(network, 4);
+	
+	//findRoutesToNode(network, 4);
+	
+	printf("%d\n", compareResults(network, 4));
 	
 exit(0);
 }
