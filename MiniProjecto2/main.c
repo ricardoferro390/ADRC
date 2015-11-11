@@ -7,6 +7,7 @@
 #define PROVIDER_ROUTE 1
 #define PEER_ROUTE 2
 #define CUSTOMER_ROUTE 3
+#define MAXIMUM_NUMBER_OF_HOPS 50
 
 
 int numberOfNodes = 0;
@@ -47,6 +48,15 @@ typedef struct s{
 	boolean sentToProviders;
 } sentRecords;
 
+typedef struct st{
+	int numberOfLinkedNodes;
+	int numberPairOfNodes;
+	int numberOfUnusableRoutes;
+	int numberOfProviderRoutes;
+	int numberOfPeerRoutes;
+	int numberOfCustomerRoutes;
+	int numberOfHops[MAXIMUM_NUMBER_OF_HOPS];
+} statistics;
 
 
 routingTable * NewRoutingTable(int numberOfNodes){
@@ -85,6 +95,28 @@ sentRecords * NewRecords(int numberOfNodes){
 	}
 	return records;
 }
+
+
+statistics * NewStatistics(){
+	
+	int i;
+	statistics * newStatistics;
+	
+	newStatistics = malloc(sizeof(statistics));
+	
+	newStatistics->numberOfLinkedNodes = 0;
+	newStatistics->numberPairOfNodes = 0;
+	newStatistics->numberOfUnusableRoutes = 0;
+	newStatistics->numberOfPeerRoutes = 0;
+	newStatistics->numberOfCustomerRoutes = 0;
+	newStatistics->numberOfProviderRoutes = 0;
+		
+	for(i = 0; i <= numberOfNodes; i++)
+		newStatistics->numberOfHops[i] = 0;
+	
+	return newStatistics;
+}
+
 
 fifo * NewFifoElement(int previousNode, int nodeId, int currentRouteType, int currentHops){
 	fifo * newElement;
@@ -172,7 +204,7 @@ node * ReadNetwork(char * inputPath){
 	
 	while(fgets(line, MAX_LINE_SIZE, fp) != NULL){
 		if(sscanf(line, "%d %d %d", &tail, &head, &role) == 3){
-			if(tail<5000 || head<5000) 
+			if(tail<2000 || head<2000) 
 				AddEdge(network, tail, head, role);
 		}
 		else
@@ -315,7 +347,7 @@ routingTable * findRoutesToNode(node * network, int destinationNode){
 	return results;
 }
 
-
+/*
 routingTable * findRoutesToNodeOld(node * network, int destinationNode){
 	fifo * currentNode = NULL, * fifoEnd = NULL, * aux = NULL;
 	adj * cursor = NULL;
@@ -392,8 +424,25 @@ routingTable * findRoutesToNodeOld(node * network, int destinationNode){
 	//printRoutingTable(network, results);
 	return results;
 }
+*/
 
+statistics * GetStatistics(node * network){
 
+	int i;
+	statistics * stats;
+	routingTable * results;
+	
+	stats = NewStatistics();
+	
+	for(i=1;i<=numberOfNodes;i++){
+		results = findRoutesToNode(network, i);
+		
+	}
+	
+	return stats;
+}
+
+/*
 boolean compareResults(node * network, int destinationNode){
 	int i;
 	routingTable * newResults, * oldResults;
@@ -410,7 +459,8 @@ boolean compareResults(node * network, int destinationNode){
 		}
 	}
 	return TRUE;
-}	
+}
+*/
 
 
 int main(){
@@ -423,7 +473,7 @@ int main(){
 	
 	//findRoutesToNode(network, 4);
 	
-	printf("%d\n", compareResults(network, 4));
+	//printf("%d\n", compareResults(network, 4));
 	
 exit(0);
 }
