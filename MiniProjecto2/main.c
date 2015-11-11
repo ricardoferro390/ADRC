@@ -9,6 +9,9 @@
 #define CUSTOMER_ROUTE 3
 
 
+int numberOfNodes = 0;
+
+
 typedef enum{
   FALSE,
   TRUE
@@ -38,8 +41,12 @@ typedef struct r{
 	int hops;
 } routingTable;
 
+typedef struct s{
+	boolean sentToCustomers;
+	boolean sentToPeers;
+	boolean sentToProviders;
+} sentRecords;
 
-int numberOfNodes = 0;
 
 
 routingTable * NewRoutingTable(int numberOfNodes){
@@ -64,6 +71,19 @@ node * CreateNetwork(int numberOfNodes){
 		network[i].providers = NULL;
 	}
 	return network;
+}
+
+sentRecords * NewRecords(int numberOfNodes){
+	int i;
+	sentRecords * records;
+	
+	records = malloc((numberOfNodes + 1) * sizeof(sentRecords));
+	for(i = 0; i <= numberOfNodes; i++){
+		records[i].sentToCustomers = FALSE;
+		records[i].sentToPeers = FALSE;
+		records[i].sentToProviders = FALSE;
+	}
+	return records;
 }
 
 fifo * NewFifoElement(int previousNode, int nodeId, int currentRouteType, int currentHops){
@@ -193,14 +213,16 @@ void printAdjList(node * network){
 		
 }
 
-void printRoutingTable(routingTable * results){
+void printRoutingTable(node * network, routingTable * results){
 	int i;
 	for(i = 1; i <= numberOfNodes; i++){
-		if(results[i].routeType == -1) printf("Node:  %d\tUnusable Route\n", i);
-		if(results[i].routeType == 0) printf("Node:  %d\tDestination Node\n", i);
-		if(results[i].routeType == 1) printf("Node:  %d\tProvider Route\t\tHops: %d\n", i, results[i].hops);
-		if(results[i].routeType == 2) printf("Node:  %d\tPeer Route\t\tHops: %d\n", i, results[i].hops);
-		if(results[i].routeType == 3) printf("Node:  %d\tCustomer Route\t\tHops: %d\n", i, results[i].hops);
+		if(network[i].providers != NULL || network[i].peers != NULL || network[i].customers != NULL){
+			if(results[i].routeType == -1) printf("Node:  %d\tUnusable Route\n", i);
+			else if(results[i].routeType == 0) printf("Node:  %d\tDestination Node\n", i);
+			else if(results[i].routeType == 1) printf("Node:  %d\tProvider Route\t\tHops: %d\n", i, results[i].hops);
+			else if(results[i].routeType == 2) printf("Node:  %d\tPeer Route\t\tHops: %d\n", i, results[i].hops);
+			else if(results[i].routeType == 3) printf("Node:  %d\tCustomer Route\t\tHops: %d\n", i, results[i].hops);
+		}
 	}
 	return;
 }
@@ -211,8 +233,10 @@ void findRoutesToNode(node * network, int destinationNode){
 	fifo * currentNode = NULL, * fifoEnd = NULL;
 	adj * cursor = NULL;
 	routingTable * results;
+	sentRecords * records;
 	
 	results = NewRoutingTable(numberOfNodes);
+	records = NewRecords(numberOfNodes);
 	
 	// first node only (destination node)
 	results[destinationNode].hops = 0;
@@ -226,6 +250,7 @@ void findRoutesToNode(node * network, int destinationNode){
 		else fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, CUSTOMER_ROUTE, 1));
 		cursor = cursor->next;
 	}
+	records[destinationNode].sentToProviders = TRUE;
 	
 	cursor = network[destinationNode].peers;
 	while(cursor != NULL){
@@ -236,6 +261,7 @@ void findRoutesToNode(node * network, int destinationNode){
 		else fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, PEER_ROUTE, 1));
 		cursor = cursor->next;
 	}
+	records[destinationNode].sentToPeers = TRUE;
 	
 	cursor = network[destinationNode].customers;
 	while(cursor != NULL){
@@ -246,10 +272,11 @@ void findRoutesToNode(node * network, int destinationNode){
 		else fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, PROVIDER_ROUTE, 1));
 		cursor = cursor->next;
 	}
+	records[destinationNode].sentToCustomers = TRUE;
 	////////////////////////////////////////
 
 	while(currentNode != NULL){
-		printf("Current Node = %d\n", currentNode->nodeId);
+		//printf("Current Node = %d\n", currentNode->nodeId);
 		
 		if(currentNode->currentRouteType > results[currentNode->nodeId].routeType || (currentNode->currentRouteType == results[currentNode->nodeId].routeType && currentNode->currentHops < results[currentNode->nodeId].hops)){
 			results[currentNode->nodeId].routeType = currentNode->currentRouteType;
@@ -258,27 +285,30 @@ void findRoutesToNode(node * network, int destinationNode){
 		
 		if(currentNode->currentRouteType == CUSTOMER_ROUTE){
 			cursor = network[currentNode->nodeId].providers;
-			while(cursor != NULL){
+			while(cursor != NULL && !records[currentNode->nodeId].sentToProviders){
 				if(cursor->nodeId != currentNode->previousNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, CUSTOMER_ROUTE, currentNode->currentHops + 1));
 				cursor = cursor->next;
 			}
+			records[currentNode->nodeId].sentToProviders = TRUE;
 			cursor = network[currentNode->nodeId].peers;
-			while(cursor != NULL){
+			while(cursor != NULL && !records[currentNode->nodeId].sentToPeers){
 				if(cursor->nodeId != currentNode->previousNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PEER_ROUTE, currentNode->currentHops + 1));
 				cursor = cursor->next;
-			}			
+			}
+			records[currentNode->nodeId].sentToPeers = TRUE;
 		}
 		
 		cursor = network[currentNode->nodeId].customers;
-		while(cursor != NULL){
+		while(cursor != NULL && !records[currentNode->nodeId].sentToCustomers){
 			if(cursor->nodeId != currentNode->previousNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PROVIDER_ROUTE, currentNode->currentHops + 1));
 			cursor = cursor->next;
 		}
+		records[currentNode->nodeId].sentToCustomers = TRUE;
 				
 		currentNode = currentNode->next;
 	}
 	
-	printRoutingTable(results);
+	printRoutingTable(network, results);
 	return;
 }
 
@@ -286,7 +316,9 @@ void findRoutesToNode(node * network, int destinationNode){
 int main(){
 	node * network;
 	
-	network = ReadNetwork("Enunciado.txt");
+	network = ReadNetwork("NewLargeNetwork.txt");
+	//network = ReadNetwork("Enunciado.txt");
+	//network = ReadNetwork("Enunciado2.txt");
 	//printAdjList(network);
 	findRoutesToNode(network, 4);
 	
