@@ -7,7 +7,16 @@
 #define PROVIDER_ROUTE 1
 #define PEER_ROUTE 2
 #define CUSTOMER_ROUTE 3
-#define MAXIMUM_NUMBER_OF_HOPS 50
+#define MAXIMUM_NUMBER_OF_HOPS 100
+
+///////// Para debug!!!
+#define INPUT_LIMIT 20000
+
+
+// valgrind --leak-check=yes ./main
+
+// correr com -pg no final e depois correr
+// gprof main gmon.out > analysis.txt
 
 
 int numberOfNodes = 0;
@@ -32,14 +41,14 @@ typedef struct n{
 typedef struct f{
 	int nodeId;
 	int previousNode;
-	int currentRouteType;
-	int currentHops;
+	short currentRouteType;
+	short currentHops;
 	struct f * next;
 } fifo;
 
 typedef struct r{
-	int routeType;
-	int hops;
+	short routeType;
+	short hops;
 } routingTable;
 
 typedef struct s{
@@ -55,7 +64,7 @@ typedef struct st{
 	int numberOfProviderRoutes;
 	int numberOfPeerRoutes;
 	int numberOfCustomerRoutes;
-	int numberOfHops[MAXIMUM_NUMBER_OF_HOPS];
+	int * numberOfHops;
 } statistics;
 
 
@@ -96,13 +105,13 @@ sentRecords * NewRecords(int numberOfNodes){
 	return records;
 }
 
-
 statistics * NewStatistics(){
 	
 	int i;
 	statistics * newStatistics;
 	
 	newStatistics = malloc(sizeof(statistics));
+	newStatistics->numberOfHops = malloc((MAXIMUM_NUMBER_OF_HOPS+1) * sizeof(int));
 	
 	newStatistics->numberOfLinkedNodes = 0;
 	newStatistics->numberPairOfNodes = 0;
@@ -111,12 +120,11 @@ statistics * NewStatistics(){
 	newStatistics->numberOfCustomerRoutes = 0;
 	newStatistics->numberOfProviderRoutes = 0;
 		
-	for(i = 0; i <= numberOfNodes; i++)
+	for(i = 0; i <= MAXIMUM_NUMBER_OF_HOPS; i++)
 		newStatistics->numberOfHops[i] = 0;
 	
 	return newStatistics;
 }
-
 
 fifo * NewFifoElement(int previousNode, int nodeId, int currentRouteType, int currentHops){
 	fifo * newElement;
@@ -198,13 +206,17 @@ node * ReadNetwork(char * inputPath){
 	}
 	
 	numberOfNodes = findNumberOfNodes(inputPath);
-	
+	///////// Para debug!!!
+	if(INPUT_LIMIT < numberOfNodes) numberOfNodes = INPUT_LIMIT;
+	///////// Para debug!!!
 	network = CreateNetwork(numberOfNodes);
 	
 	
 	while(fgets(line, MAX_LINE_SIZE, fp) != NULL){
 		if(sscanf(line, "%d %d %d", &tail, &head, &role) == 3){
-			if(tail<2000 || head<2000) 
+			///////// Para debug!!!
+			if(tail<INPUT_LIMIT && head<INPUT_LIMIT) 
+			///////// Para debug!!!
 				AddEdge(network, tail, head, role);
 		}
 		else
@@ -260,8 +272,7 @@ void printRoutingTable(node * network, routingTable * results){
 	}
 	return;
 }	
-		
-		
+			
 routingTable * findRoutesToNode(node * network, int destinationNode){
 	fifo * currentNode = NULL, * fifoEnd = NULL, * aux = NULL;
 	adj * cursor = NULL;
@@ -336,14 +347,15 @@ routingTable * findRoutesToNode(node * network, int destinationNode){
 			if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PROVIDER_ROUTE, currentNode->currentHops + 1));
 			cursor = cursor->next;
 		}
-		records[currentNode->nodeId].sentToCustomers = TRUE;
-				
+		records[currentNode->nodeId].sentToCustomers = TRUE;		
 		aux = currentNode;
 		currentNode = currentNode->next;
 		free(aux);
 	}
 	
 	//printRoutingTable(network, results);
+	
+	free(records);
 	return results;
 }
 
@@ -428,18 +440,54 @@ routingTable * findRoutesToNodeOld(node * network, int destinationNode){
 
 statistics * GetStatistics(node * network){
 
-	int i;
+	int i, j;
 	statistics * stats;
 	routingTable * results;
 	
 	stats = NewStatistics();
 	
-	for(i=1;i<=numberOfNodes;i++){
-		results = findRoutesToNode(network, i);
-		
+	for(i = 1; i <= numberOfNodes; i++){
+		if(network[i].providers != NULL || network[i].peers != NULL || network[i].customers != NULL){
+			results = findRoutesToNode(network, i);
+			for(j = 1; j <= numberOfNodes; j++){
+				if(network[j].providers != NULL || network[j].peers != NULL || network[j].customers != NULL){
+					
+					if(results[j].routeType == -1) stats->numberOfUnusableRoutes++;
+					else if(results[j].routeType == 0) stats->numberOfLinkedNodes++;
+					else if(results[j].routeType == 1) stats->numberOfProviderRoutes++;
+					else if(results[j].routeType == 2) stats->numberOfPeerRoutes++;
+					else if(results[j].routeType == 3) stats->numberOfCustomerRoutes++;
+					
+					stats->numberOfHops[results[j].hops]++;
+				}
+			}
+			free(results);
+			printf("%d\n", i);
+		}
 	}
 	
+	stats->numberPairOfNodes = stats->numberOfUnusableRoutes + stats->numberOfProviderRoutes + stats->numberOfPeerRoutes + stats->numberOfCustomerRoutes;
+	
 	return stats;
+}
+
+void printStatistics(statistics * stats){
+	int i;
+	printf("\n________________________________________________\n");
+	printf("\nNumber of Nodes:\t\t%d\n", stats->numberOfLinkedNodes);
+	printf("Number of Pairs Of Nodes:\t%d\n", stats->numberPairOfNodes);
+	
+	printf("\n--Route Type Statistics\n\n");
+	printf("Customer Routes:\t%d\n", stats->numberOfCustomerRoutes);
+	printf("Peer Routes:\t\t%d\n", stats->numberOfPeerRoutes);
+	printf("Provider Routes:\t%d\n", stats->numberOfProviderRoutes);
+	printf("Unusable Routes:\t%d\n", stats->numberOfUnusableRoutes);
+	
+	printf("\n--Number of Hops Statistics\n\n");
+	for(i = 1; i <= MAXIMUM_NUMBER_OF_HOPS; i++){
+		if(stats->numberOfHops[i] != 0) 
+			printf("%d Hops:\t%d\n", i, stats->numberOfHops[i]);
+	}
 }
 
 /*
@@ -465,6 +513,7 @@ boolean compareResults(node * network, int destinationNode){
 
 int main(){
 	node * network;
+	statistics * stats;
 	
 	network = ReadNetwork("NewLargeNetwork.txt");
 	//network = ReadNetwork("Enunciado.txt");
@@ -473,7 +522,10 @@ int main(){
 	
 	//findRoutesToNode(network, 4);
 	
+	stats = GetStatistics(network);
+	printStatistics(stats);
+	
 	//printf("%d\n", compareResults(network, 4));
 	
-exit(0);
+	exit(0);
 }
