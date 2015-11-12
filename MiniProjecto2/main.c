@@ -8,9 +8,10 @@
 #define PEER_ROUTE 2
 #define CUSTOMER_ROUTE 3
 #define MAXIMUM_NUMBER_OF_HOPS 100
+#define BUFFER_SIZE 128
 
 ///////// Para debug!!!
-#define INPUT_LIMIT 20000
+#define INPUT_LIMIT 5000
 
 
 // valgrind --leak-check=yes ./main
@@ -19,13 +20,15 @@
 // gprof main gmon.out > analysis.txt
 
 
-int numberOfNodes = 0;
-
-
 typedef enum{
   FALSE,
   TRUE
 } boolean;
+
+int numberOfNodes = 0;
+boolean readAtStart = FALSE;
+char path[BUFFER_SIZE];
+
 
 typedef struct l{
 	int nodeId;
@@ -348,6 +351,7 @@ routingTable * findRoutesToNode(node * network, int destinationNode){
 			cursor = cursor->next;
 		}
 		records[currentNode->nodeId].sentToCustomers = TRUE;		
+		
 		aux = currentNode;
 		currentNode = currentNode->next;
 		free(aux);
@@ -486,7 +490,7 @@ void printStatistics(statistics * stats){
 	printf("\n--Number of Hops Statistics\n\n");
 	for(i = 1; i <= MAXIMUM_NUMBER_OF_HOPS; i++){
 		if(stats->numberOfHops[i] != 0) 
-			printf("%d Hops:\t%d\n", i, stats->numberOfHops[i]);
+			printf("%3d Hops: %12d\t%5.2f%%\n", i, stats->numberOfHops[i],(100.0*stats->numberOfHops[i])/(stats->numberPairOfNodes-stats->numberOfUnusableRoutes));
 	}
 }
 
@@ -510,22 +514,89 @@ boolean compareResults(node * network, int destinationNode){
 }
 */
 
+void printMenu(){
+	printf("\n\tADRC - Mini Project II - Inter-Domain Routing\n");
+	printf("\tBy: Diogo Salgueiro 72777, Ricardo Ferro 72870\n");
+	printf("\n\t- Load network from file:\t\tf [file]\n");
+	printf("\t- Find routes to destination:\t\tr [destination node]\n");
+	printf("\t- Run statistics on current network:\ts\n");
+	printf("\t- Help:\t\t\t\t\th\n");
+	printf("\t- Quit:\t\t\t\t\tq\n\n");
+};
 
-int main(){
-	node * network;
-	statistics * stats;
+void checkArguments(int argc, char ** argv){
+	if(argc>2){
+		printf("\nToo many arguments!\n\n");
+		exit(0);
+	}
+	else if(argc == 2){
+		readAtStart = TRUE;
+		strcpy(path, argv[1]);
+	}
+};
+
+void MenuHandler(){
 	
-	network = ReadNetwork("NewLargeNetwork.txt");
+	short nArgs;
+	
+	node * network = NULL;
+	statistics * stats = NULL;
+	routingTable * results = NULL;
+	char option, buffer[BUFFER_SIZE], arg1[BUFFER_SIZE], garbageDetector[BUFFER_SIZE];
+	
+	
+	// printing menu
+	printMenu();
+	if(readAtStart) network = ReadNetwork(path);
+	printf("Please select an option\n");
+	
+	
+	while(TRUE){
+		// gets user commands and arguments
+		printf("-> ");
+		fgets (buffer, BUFFER_SIZE, stdin);
+		nArgs = sscanf(buffer, "%c %s %s", &option, arg1, garbageDetector);
+		
+		
+		// selects function based on user option
+		if(option == 'f' && nArgs == 2) network = ReadNetwork(arg1);
+		else if(option == 'r' && nArgs == 2) {
+			results = findRoutesToNode(network, atoi(arg1));
+			printRoutingTable(network,results);
+		}
+		else if(option == 's' && nArgs == 1){
+			stats = GetStatistics(network);
+			printStatistics(stats);
+		} 
+		else if(option == 'h' && nArgs == 1) printMenu();
+		else if(option == 'q' && nArgs == 1){
+			//CLEAN!!
+			printf("Project by: Diogo Salgueiro 72777 and Ricardo Ferro 72870\n");
+			printf("Goodbye!\n");
+			return;
+		}
+		else printf("Invalid command\n");
+		
+	}
+};
+
+int main(int argc, char ** argv){
+	
+	//network = ReadNetwork("NewLargeNetwork.txt");
 	//network = ReadNetwork("Enunciado.txt");
 	//network = ReadNetwork("Enunciado2.txt");
 	//printAdjList(network);
 	
 	//findRoutesToNode(network, 4);
 	
-	stats = GetStatistics(network);
-	printStatistics(stats);
+	//stats = GetStatistics(network);
+	//printStatistics(stats);
 	
 	//printf("%d\n", compareResults(network, 4));
 	
+	//printMenu();
+	
+	checkArguments(argc, argv);
+	MenuHandler();
 	exit(0);
 }
