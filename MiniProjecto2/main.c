@@ -11,7 +11,7 @@
 #define BUFFER_SIZE 128
 
 ///////// Para debug!!!
-#define INPUT_LIMIT 5000
+#define INPUT_LIMIT 2000
 
 
 // valgrind --leak-check=yes ./main
@@ -24,11 +24,6 @@ typedef enum{
   FALSE,
   TRUE
 } boolean;
-
-int numberOfNodes = 0;
-boolean readAtStart = FALSE;
-char path[BUFFER_SIZE];
-
 
 typedef struct l{
 	int nodeId;
@@ -70,17 +65,11 @@ typedef struct st{
 	int * numberOfHops;
 } statistics;
 
-
-routingTable * NewRoutingTable(int numberOfNodes){
-	int i;
-	routingTable * newRoutingTable;
-	newRoutingTable = malloc((numberOfNodes + 1) * sizeof(routingTable));
-	for(i = 0; i <= numberOfNodes; i++){
-		newRoutingTable[i].routeType = -1;
-		newRoutingTable[i].hops = -1;
-	}
-	return newRoutingTable;
-}
+int numberOfNodes = 0;
+boolean readAtStart = FALSE;
+char path[BUFFER_SIZE];
+sentRecords * records = NULL;
+routingTable * results = NULL;
 
 node * CreateNetwork(int numberOfNodes){
 	int i;
@@ -95,11 +84,28 @@ node * CreateNetwork(int numberOfNodes){
 	return network;
 }
 
-sentRecords * NewRecords(int numberOfNodes){
+routingTable * ResetRoutingTable(routingTable * table){
+	if(table == NULL) return NULL;
 	int i;
-	sentRecords * records;
+	for(i = 0; i <= numberOfNodes; i++){
+		table[i].routeType = -1;
+		table[i].hops = -1;
+	}
+	return table;
+}
+
+routingTable * NewRoutingTable(int numberOfNodes){
 	
-	records = malloc((numberOfNodes + 1) * sizeof(sentRecords));
+	routingTable * newRoutingTable;
+	newRoutingTable = malloc((numberOfNodes + 1) * sizeof(routingTable));
+	ResetRoutingTable(newRoutingTable);
+	return newRoutingTable;
+}
+
+
+sentRecords * ResetRecords(sentRecords * records){
+	int i;
+	if(records == NULL) return NULL;
 	for(i = 0; i <= numberOfNodes; i++){
 		records[i].sentToCustomers = FALSE;
 		records[i].sentToPeers = FALSE;
@@ -107,6 +113,15 @@ sentRecords * NewRecords(int numberOfNodes){
 	}
 	return records;
 }
+
+sentRecords * NewRecords(int numberOfNodes){
+	sentRecords * records;
+	records = malloc((numberOfNodes + 1) * sizeof(sentRecords));
+	ResetRecords(records);
+	return records;
+}
+
+
 
 statistics * NewStatistics(){
 	
@@ -178,7 +193,7 @@ void AddEdge(node * network, int tail, int head, int role){
 	return;
 };
 
-int findNumberOfNodes(char * inputPath){
+int FindNumberOfNodes(char * inputPath){
 	FILE * fp;
 	int tail, head, role, total = 0;
 	char line[MAX_LINE_SIZE];
@@ -208,7 +223,7 @@ node * ReadNetwork(char * inputPath){
 		return NULL;
 	}
 	
-	numberOfNodes = findNumberOfNodes(inputPath);
+	numberOfNodes = FindNumberOfNodes(inputPath);
 	///////// Para debug!!!
 	if(INPUT_LIMIT < numberOfNodes) numberOfNodes = INPUT_LIMIT;
 	///////// Para debug!!!
@@ -230,7 +245,7 @@ node * ReadNetwork(char * inputPath){
    	
 };
 
-void printAdjList(node * network){
+void PrintAdjList(node * network){
 	int i;
 	adj * aux;
 	
@@ -262,7 +277,7 @@ void printAdjList(node * network){
 		
 }
 
-void printRoutingTable(node * network, routingTable * results){
+void PrintRoutingTable(node * network){
 	int i;
 	for(i = 1; i <= numberOfNodes; i++){
 		if(network[i].providers != NULL || network[i].peers != NULL || network[i].customers != NULL){
@@ -276,54 +291,44 @@ void printRoutingTable(node * network, routingTable * results){
 	return;
 }	
 			
-routingTable * findRoutesToNode(node * network, int destinationNode){
+routingTable * FindRoutesToNode(node * network, int destinationNode){
 	fifo * currentNode = NULL, * fifoEnd = NULL, * aux = NULL;
 	adj * cursor = NULL;
-	routingTable * results;
-	sentRecords * records;
 	
-	results = NewRoutingTable(numberOfNodes);
-	records = NewRecords(numberOfNodes);
+	results = (results == NULL) ? NewRoutingTable(numberOfNodes) : ResetRoutingTable(results);
+	records = (records == NULL) ? NewRecords(numberOfNodes) : ResetRecords(records);
 	
 	// first node only (destination node)
 	results[destinationNode].hops = 0;
 	results[destinationNode].routeType = 0;
+	
+	
 	cursor = network[destinationNode].providers;
 	while(cursor != NULL){
-		if(currentNode == NULL){
-			currentNode = InsertFifo(currentNode, NewFifoElement(destinationNode, cursor->nodeId, CUSTOMER_ROUTE, 1));
-			fifoEnd = currentNode;
-		}
-		else fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, CUSTOMER_ROUTE, 1));
+		fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, CUSTOMER_ROUTE, 1));
+		if(currentNode == NULL) currentNode = fifoEnd;
 		cursor = cursor->next;
 	}
 	records[destinationNode].sentToProviders = TRUE;
 	
 	cursor = network[destinationNode].peers;
 	while(cursor != NULL){
-		if(currentNode == NULL){
-			currentNode = InsertFifo(currentNode, NewFifoElement(destinationNode, cursor->nodeId, PEER_ROUTE, 1));
-			fifoEnd = currentNode;
-		}
-		else fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, PEER_ROUTE, 1));
+		fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, PEER_ROUTE, 1));
+		if(currentNode == NULL) currentNode = fifoEnd;
 		cursor = cursor->next;
 	}
 	records[destinationNode].sentToPeers = TRUE;
 	
 	cursor = network[destinationNode].customers;
 	while(cursor != NULL){
-		if(currentNode == NULL){
-			currentNode = InsertFifo(currentNode, NewFifoElement(destinationNode, cursor->nodeId, PROVIDER_ROUTE, 1));
-			fifoEnd = currentNode;
-		}
-		else fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, PROVIDER_ROUTE, 1));
+		fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, PROVIDER_ROUTE, 1));
+		if(currentNode == NULL) currentNode = fifoEnd;
 		cursor = cursor->next;
 	}
 	records[destinationNode].sentToCustomers = TRUE;
 	////////////////////////////////////////
 
 	while(currentNode != NULL){
-		//printf("Current Node = %d\n", currentNode->nodeId);
 		
 		if(currentNode->currentRouteType > results[currentNode->nodeId].routeType || (currentNode->currentRouteType == results[currentNode->nodeId].routeType && currentNode->currentHops < results[currentNode->nodeId].hops)){
 			results[currentNode->nodeId].routeType = currentNode->currentRouteType;
@@ -356,10 +361,7 @@ routingTable * findRoutesToNode(node * network, int destinationNode){
 		currentNode = currentNode->next;
 		free(aux);
 	}
-	
-	//printRoutingTable(network, results);
-	
-	free(records);
+
 	return results;
 }
 
@@ -452,7 +454,7 @@ statistics * GetStatistics(node * network){
 	
 	for(i = 1; i <= numberOfNodes; i++){
 		if(network[i].providers != NULL || network[i].peers != NULL || network[i].customers != NULL){
-			results = findRoutesToNode(network, i);
+			results = FindRoutesToNode(network, i);
 			for(j = 1; j <= numberOfNodes; j++){
 				if(network[j].providers != NULL || network[j].peers != NULL || network[j].customers != NULL){
 					
@@ -465,7 +467,7 @@ statistics * GetStatistics(node * network){
 					stats->numberOfHops[results[j].hops]++;
 				}
 			}
-			free(results);
+			ResetRoutingTable(results);
 			printf("%d\n", i);
 		}
 	}
@@ -475,25 +477,25 @@ statistics * GetStatistics(node * network){
 	return stats;
 }
 
-void printStatistics(statistics * stats){
+void PrintStatistics(statistics * stats){
 	int i;
-	printf("\n________________________________________________\n");
+	
 	printf("\nNumber of Nodes:\t\t%d\n", stats->numberOfLinkedNodes);
 	printf("Number of Pairs Of Nodes:\t%d\n", stats->numberPairOfNodes);
 	
-	printf("\n--Route Type Statistics\n\n");
+	printf("\n -- Route Type Statistics\n\n");
 	printf("Customer Routes:\t%d\n", stats->numberOfCustomerRoutes);
 	printf("Peer Routes:\t\t%d\n", stats->numberOfPeerRoutes);
 	printf("Provider Routes:\t%d\n", stats->numberOfProviderRoutes);
 	printf("Unusable Routes:\t%d\n", stats->numberOfUnusableRoutes);
 	
-	printf("\n--Number of Hops Statistics\n\n");
+	printf("\n -- Number of Hops Statistics\n\n");
 	for(i = 1; i <= MAXIMUM_NUMBER_OF_HOPS; i++){
 		if(stats->numberOfHops[i] != 0) 
-			printf("%3d Hops: %12d\t%5.2f%%\n", i, stats->numberOfHops[i],(100.0*stats->numberOfHops[i])/(stats->numberPairOfNodes-stats->numberOfUnusableRoutes));
+			printf("%3d Hops: %12d\t%8.5f %%\n", i, stats->numberOfHops[i],(100.0*stats->numberOfHops[i])/(stats->numberPairOfNodes-stats->numberOfUnusableRoutes));
 	}
+	printf("\n");
 }
-
 /*
 boolean compareResults(node * network, int destinationNode){
 	int i;
@@ -514,7 +516,7 @@ boolean compareResults(node * network, int destinationNode){
 }
 */
 
-void printMenu(){
+void PrintMenu(){
 	printf("\n\tADRC - Mini Project II - Inter-Domain Routing\n");
 	printf("\tBy: Diogo Salgueiro 72777, Ricardo Ferro 72870\n");
 	printf("\n\t- Load network from file:\t\tf [file]\n");
@@ -524,7 +526,7 @@ void printMenu(){
 	printf("\t- Quit:\t\t\t\t\tq\n\n");
 };
 
-void checkArguments(int argc, char ** argv){
+void CheckArguments(int argc, char ** argv){
 	if(argc>2){
 		printf("\nToo many arguments!\n\n");
 		exit(0);
@@ -541,15 +543,13 @@ void MenuHandler(){
 	
 	node * network = NULL;
 	statistics * stats = NULL;
-	routingTable * results = NULL;
 	char option, buffer[BUFFER_SIZE], arg1[BUFFER_SIZE], garbageDetector[BUFFER_SIZE];
 	
 	
 	// printing menu
-	printMenu();
+	PrintMenu();
 	if(readAtStart) network = ReadNetwork(path);
 	printf("Please select an option\n");
-	
 	
 	while(TRUE){
 		// gets user commands and arguments
@@ -561,14 +561,14 @@ void MenuHandler(){
 		// selects function based on user option
 		if(option == 'f' && nArgs == 2) network = ReadNetwork(arg1);
 		else if(option == 'r' && nArgs == 2) {
-			results = findRoutesToNode(network, atoi(arg1));
-			printRoutingTable(network,results);
+			results = FindRoutesToNode(network, atoi(arg1));
+			PrintRoutingTable(network);
 		}
 		else if(option == 's' && nArgs == 1){
 			stats = GetStatistics(network);
-			printStatistics(stats);
+			PrintStatistics(stats);
 		} 
-		else if(option == 'h' && nArgs == 1) printMenu();
+		else if(option == 'h' && nArgs == 1) PrintMenu();
 		else if(option == 'q' && nArgs == 1){
 			//CLEAN!!
 			printf("Project by: Diogo Salgueiro 72777 and Ricardo Ferro 72870\n");
@@ -582,21 +582,24 @@ void MenuHandler(){
 
 int main(int argc, char ** argv){
 	
-	//network = ReadNetwork("NewLargeNetwork.txt");
+	node * network;
+	statistics * stats;
+	
+	network = ReadNetwork("NewLargeNetwork.txt");
 	//network = ReadNetwork("Enunciado.txt");
 	//network = ReadNetwork("Enunciado2.txt");
 	//printAdjList(network);
 	
 	//findRoutesToNode(network, 4);
 	
-	//stats = GetStatistics(network);
-	//printStatistics(stats);
+	stats = GetStatistics(network);
+	PrintStatistics(stats);
 	
 	//printf("%d\n", compareResults(network, 4));
 	
 	//printMenu();
-	
+	/*
 	checkArguments(argc, argv);
-	MenuHandler();
+	MenuHandler();*/
 	exit(0);
 }
