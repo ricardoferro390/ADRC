@@ -13,7 +13,7 @@
 #define NUMBER_OF_PROGRESS_STEPS 20
 
 ///////// Para debug!!!
-#define INPUT_LIMIT 10000
+#define INPUT_LIMIT 100000
 
 
 // valgrind --leak-check=yes ./main
@@ -68,12 +68,13 @@ typedef struct st{
 } statistics;
 
 int numberOfNodes = 0;
-boolean readAtStart = FALSE;
+boolean executeAtStart = FALSE;
 char path[BUFFER_SIZE];
 sentRecords * records = NULL;
 routingTable * results = NULL;
 int progress[NUMBER_OF_PROGRESS_STEPS];
 struct timeval tvalStart, tvalEnd;
+fifo * auxFree = NULL;
 
 void GetProgressThresholds(){
 	int i;
@@ -105,7 +106,6 @@ routingTable * ResetRoutingTable(routingTable * table){
 }
 
 routingTable * NewRoutingTable(int numberOfNodes){
-	
 	routingTable * newRoutingTable;
 	newRoutingTable = malloc((numberOfNodes + 1) * sizeof(routingTable));
 	ResetRoutingTable(newRoutingTable);
@@ -137,35 +137,44 @@ statistics * NewStatistics(){
 	
 	newStatistics = malloc(sizeof(statistics));
 	newStatistics->numberOfHops = malloc((MAXIMUM_NUMBER_OF_HOPS+1) * sizeof(int));
-	
+
 	newStatistics->numberOfLinkedNodes = 0;
 	newStatistics->numberPairOfNodes = 0;
 	newStatistics->numberOfUnusableRoutes = 0;
 	newStatistics->numberOfPeerRoutes = 0;
 	newStatistics->numberOfCustomerRoutes = 0;
 	newStatistics->numberOfProviderRoutes = 0;
-		
+
 	for(i = 0; i <= MAXIMUM_NUMBER_OF_HOPS; i++)
 		newStatistics->numberOfHops[i] = 0;
-	
+
 	return newStatistics;
 }
 
 fifo * NewFifoElement(int previousNode, int nodeId, int currentRouteType, int currentHops){
 	fifo * newElement;
-	newElement = malloc(sizeof(fifo));
+	newElement = (fifo *)malloc(sizeof(fifo));
+
 	newElement->previousNode = previousNode;
 	newElement->nodeId = nodeId;
 	newElement->currentRouteType = currentRouteType;
 	newElement->currentHops = currentHops;
 	newElement->next = NULL;
+	
 	return newElement;
 }
 
-fifo * InsertFifo(fifo * fifoEnd, fifo * newElement){
+fifo * InsertElementInFifo(fifo * fifoEnd, fifo * newElement){
 	if(fifoEnd == NULL) return newElement;
 	fifoEnd->next = newElement;
 	return fifoEnd->next;
+}
+
+fifo * FreeFifoElement(fifo * element){
+	auxFree = element;
+	element = element->next;
+	free(auxFree);
+	return element;
 }
 
 adj * NewAdj(int nodeId){
@@ -266,7 +275,7 @@ void PrintExecutionTime(){
 	seconds = (minutes != 0) ? seconds % minutes: seconds;
 	minutes = (hours != 0) ? minutes % hours: minutes;
 	
-	printf(" -- Execution Time: %dh %dm %d.%ds\n", hours, minutes, seconds, miliseconds);	
+	printf(" -- Execution Time: %dh %dm %d.%ds\n\n", hours, minutes, seconds, miliseconds);	
 }
 
 void PrintAdjList(node * network){
@@ -303,99 +312,74 @@ void PrintAdjList(node * network){
 
 void PrintRoutingTable(node * network){
 	int i;
+	printf("\n");
 	for(i = 1; i <= numberOfNodes; i++){
 		if(network[i].providers != NULL || network[i].peers != NULL || network[i].customers != NULL){
 			if(results[i].routeType == -1) printf("Node:  %d\tUnusable Route\n", i);
 			else if(results[i].routeType == 0) printf("Node:  %d\tDestination Node\n", i);
-			else if(results[i].routeType == 1) printf("Node:  %d\tProvider Route\t\tHops: %d\n", i, results[i].hops);
-			else if(results[i].routeType == 2) printf("Node:  %d\tPeer Route\t\tHops: %d\n", i, results[i].hops);
-			else if(results[i].routeType == 3) printf("Node:  %d\tCustomer Route\t\tHops: %d\n", i, results[i].hops);
+			else if(results[i].routeType == PROVIDER_ROUTE) printf("Node:  %d\tProvider Route\t\tHops: %d\n", i, results[i].hops);
+			else if(results[i].routeType == PEER_ROUTE) printf("Node:  %d\tPeer Route\t\tHops: %d\n", i, results[i].hops);
+			else if(results[i].routeType == CUSTOMER_ROUTE) printf("Node:  %d\tCustomer Route\t\tHops: %d\n", i, results[i].hops);
 		}
 	}
+	printf("\n");
 	return;
 }	
 			
+fifo * AddNodeToFifo(fifo * fifoEnd, fifo * currentNode, adj * cursor, int destinationNode, int routeType){
+	while(cursor != NULL){
+		if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) 
+			fifoEnd = InsertElementInFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, routeType, currentNode->currentHops + 1));
+		cursor = cursor->next;
+	}	
+	return fifoEnd;
+}			
+			
 routingTable * FindRoutesToNode(node * network, int destinationNode){
-	fifo * currentNode = NULL, * fifoEnd = NULL, * aux = NULL;
+	fifo * currentNode = NULL, * fifoEnd = NULL;
 	adj * cursor = NULL;
 	
 	results = (results == NULL) ? NewRoutingTable(numberOfNodes) : ResetRoutingTable(results);
 	records = (records == NULL) ? NewRecords(numberOfNodes) : ResetRecords(records);
-	
-	// first node only (destination node)
-	results[destinationNode].hops = 0;
-	results[destinationNode].routeType = 0;
-	
-	
-	cursor = network[destinationNode].providers;
-	while(cursor != NULL){
-		fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, CUSTOMER_ROUTE, 1));
-		if(currentNode == NULL) currentNode = fifoEnd;
-		cursor = cursor->next;
-	}
-	records[destinationNode].sentToProviders = TRUE;
-	
-	cursor = network[destinationNode].peers;
-	while(cursor != NULL){
-		fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, PEER_ROUTE, 1));
-		if(currentNode == NULL) currentNode = fifoEnd;
-		cursor = cursor->next;
-	}
-	records[destinationNode].sentToPeers = TRUE;
-	
-	cursor = network[destinationNode].customers;
-	while(cursor != NULL){
-		fifoEnd = InsertFifo(fifoEnd, NewFifoElement(destinationNode, cursor->nodeId, PROVIDER_ROUTE, 1));
-		if(currentNode == NULL) currentNode = fifoEnd;
-		cursor = cursor->next;
-	}
-	records[destinationNode].sentToCustomers = TRUE;
-	////////////////////////////////////////
-
-	while(currentNode != NULL){
 		
-		if(currentNode->currentRouteType > results[currentNode->nodeId].routeType || (currentNode->currentRouteType == results[currentNode->nodeId].routeType && currentNode->currentHops < results[currentNode->nodeId].hops)){
-			results[currentNode->nodeId].routeType = currentNode->currentRouteType;
-			results[currentNode->nodeId].hops = currentNode->currentHops;
+	currentNode = InsertElementInFifo(currentNode, NewFifoElement(destinationNode, destinationNode, 0, 0));
+	fifoEnd = currentNode;
+	
+	while(currentNode != NULL){			
+		
+		if(currentNode->currentRouteType > results[currentNode->nodeId].routeType
+		|| (currentNode->currentRouteType == results[currentNode->nodeId].routeType && currentNode->currentHops < results[currentNode->nodeId].hops)
+		|| currentNode->currentRouteType == 0){
+				results[currentNode->nodeId].routeType = currentNode->currentRouteType;
+				results[currentNode->nodeId].hops = currentNode->currentHops;
 		}
 		
-		if(currentNode->currentRouteType == CUSTOMER_ROUTE){
+		if(currentNode->currentRouteType == CUSTOMER_ROUTE || currentNode->currentRouteType == 0){
 			cursor = network[currentNode->nodeId].providers;
-			while(cursor != NULL && !records[currentNode->nodeId].sentToProviders){
-				if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, CUSTOMER_ROUTE, currentNode->currentHops + 1));
-				cursor = cursor->next;
-			}
+			if(!records[currentNode->nodeId].sentToProviders)
+				fifoEnd = AddNodeToFifo(fifoEnd, currentNode, cursor, destinationNode, CUSTOMER_ROUTE);
 			records[currentNode->nodeId].sentToProviders = TRUE;
+			
 			cursor = network[currentNode->nodeId].peers;
-			while(cursor != NULL && !records[currentNode->nodeId].sentToPeers){
-				if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PEER_ROUTE, currentNode->currentHops + 1));
-				cursor = cursor->next;
-			}
+			if(!records[currentNode->nodeId].sentToPeers)
+				fifoEnd = AddNodeToFifo(fifoEnd, currentNode, cursor, destinationNode, PEER_ROUTE);
 			records[currentNode->nodeId].sentToPeers = TRUE;
 		}
 		
 		cursor = network[currentNode->nodeId].customers;
-		while(cursor != NULL && !records[currentNode->nodeId].sentToCustomers){
-			if(cursor->nodeId != currentNode->previousNode && cursor->nodeId != destinationNode) fifoEnd = InsertFifo(fifoEnd, NewFifoElement(currentNode->nodeId, cursor->nodeId, PROVIDER_ROUTE, currentNode->currentHops + 1));
-			cursor = cursor->next;
-		}
+		if(!records[currentNode->nodeId].sentToCustomers)
+			fifoEnd = AddNodeToFifo(fifoEnd, currentNode, cursor, destinationNode, PROVIDER_ROUTE);
 		records[currentNode->nodeId].sentToCustomers = TRUE;		
 		
-		aux = currentNode;
-		currentNode = currentNode->next;
-		free(aux);
+		currentNode = FreeFifoElement(currentNode);
 	}
-
+	
 	return results;
 }
-
-
-
 
 statistics * GetStatistics(node * network){
 	int i, j, k = 0;
 	statistics * stats;
-	routingTable * results;
 	
 	stats = NewStatistics();
 	
@@ -415,10 +399,7 @@ statistics * GetStatistics(node * network){
 					stats->numberOfHops[results[j].hops]++;
 				}
 			}
-			ResetRoutingTable(results);
-			
-			//printf("%d\n", i);
-			
+			ResetRoutingTable(results);			
 		}
 		if(i == progress[k]){
 			printf("%d%%\n", ((k+1) * 100)/NUMBER_OF_PROGRESS_STEPS);	
@@ -430,6 +411,12 @@ statistics * GetStatistics(node * network){
 	stats->numberPairOfNodes = stats->numberOfUnusableRoutes + stats->numberOfProviderRoutes + stats->numberOfPeerRoutes + stats->numberOfCustomerRoutes;
 	
 	gettimeofday (&tvalEnd, NULL);	
+	
+	free(results);
+	results = NULL;
+	free(records);
+	records = NULL;
+	
 	return stats;
 }
 
@@ -469,23 +456,37 @@ void CheckArguments(int argc, char ** argv){
 		exit(0);
 	}
 	else if(argc == 2){
-		readAtStart = TRUE;
+		executeAtStart = TRUE;
 		strcpy(path, argv[1]);
 	}
 };
 
+void FreeEverything(node * network, statistics * stats){
+	if(network != NULL) free(network);
+	if(stats != NULL) free(stats);
+}
+
 void MenuHandler(){
-	
 	short nArgs;
-	
+	int selectedNode;
 	node * network = NULL;
 	statistics * stats = NULL;
 	char option, buffer[BUFFER_SIZE], arg1[BUFFER_SIZE], garbageDetector[BUFFER_SIZE];
 	
+	if(executeAtStart){
+		network = ReadNetwork(path);
+		if(network != NULL){
+			stats = GetStatistics(network);
+			PrintStatistics(stats);
+			PrintExecutionTime();
+			FreeEverything(network, stats);
+			return;
+		}
+		else return;
+	}
 	
 	// printing menu
 	PrintMenu();
-	if(readAtStart) network = ReadNetwork(path);
 	printf("Please select an option\n");
 	
 	while(TRUE){
@@ -494,21 +495,38 @@ void MenuHandler(){
 		fgets (buffer, BUFFER_SIZE, stdin);
 		nArgs = sscanf(buffer, "%c %s %s", &option, arg1, garbageDetector);
 		
-		
 		// selects function based on user option
-		if(option == 'f' && nArgs == 2) network = ReadNetwork(arg1);
-		else if(option == 'r' && nArgs == 2) {
-			results = FindRoutesToNode(network, atoi(arg1));
-			PrintRoutingTable(network);
+		////////// load
+		if(option == 'f' && nArgs == 2){
+			if(network != NULL) free(network);
+			network = ReadNetwork(arg1);
+			if(network != NULL) printf("Network loaded from file\n");
 		}
+		////////// route
+		else if(option == 'r' && nArgs == 2) {
+			if(network != NULL){
+				selectedNode = atoi(arg1);
+				if(selectedNode <= numberOfNodes && selectedNode > 0){
+					results = FindRoutesToNode(network, selectedNode);
+					PrintRoutingTable(network);
+				}
+				else printf("Please select valid node\n");
+			}
+			else printf("Please load a network first\n");
+		}
+		///////// statistics
 		else if(option == 's' && nArgs == 1){
-			stats = GetStatistics(network);
-			PrintStatistics(stats);
-			PrintExecutionTime();
+			if(network != NULL){
+				stats = GetStatistics(network);
+				PrintStatistics(stats);
+				PrintExecutionTime();
+			}
+			else printf("Please load a network first\n");
 		} 
+		//////// others
 		else if(option == 'h' && nArgs == 1) PrintMenu();
 		else if(option == 'q' && nArgs == 1){
-			//CLEAN!!
+			FreeEverything(network, stats);
 			printf("Project by: Diogo Salgueiro 72777 and Ricardo Ferro 72870\n");
 			printf("Goodbye!\n");
 			return;
@@ -519,22 +537,7 @@ void MenuHandler(){
 };
 
 int main(int argc, char ** argv){
-	
-	node * network;
-	statistics * stats;
-	
-	network = ReadNetwork("NewLargeNetwork.txt");
-	//network = ReadNetwork("Enunciado.txt");
-	//network = ReadNetwork("Enunciado2.txt");
-	
-	//findRoutesToNode(network, 4);
-	
-	stats = GetStatistics(network);
-	PrintStatistics(stats);
-	PrintExecutionTime();
-
-
-	/*CheckArguments(argc, argv);
-	MenuHandler();*/
+	CheckArguments(argc, argv);
+	MenuHandler();
 	exit(0);
 }
